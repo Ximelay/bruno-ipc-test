@@ -1,36 +1,30 @@
 require('dotenv').config({ path: process.env.DOTENV_PATH });
 const fs = require('fs');
 const path = require('path');
-const electron_notarize = require('electron-notarize');
+const { notarize } = require('@electron/notarize');
 
-const notarize = async function (params) {
-  if (process.platform !== 'darwin') {
-    return;
-  }
+module.exports = async function (params) {
+  if (process.platform !== 'darwin') return;
 
-  let appId = 'com.usebruno.app';
-
-  let appPath = path.join(params.appOutDir, `${params.packager.appInfo.productFilename}.app`);
+  const appPath = path.join(params.appOutDir, `${params.packager.appInfo.productFilename}.app`);
   if (!fs.existsSync(appPath)) {
     console.error(`Cannot find application at: ${appPath}`);
     return;
   }
 
-  console.log(`Notarizing ${appId} found at ${appPath} using Apple ID ${process.env.APPLE_ID}`);
-
-  try {
-    await electron_notarize.notarize({
-      appBundleId: appId,
-      appPath: appPath,
-      appleId: process.env.APPLE_ID,
-      appleIdPassword: process.env.APPLE_ID_PASSWORD,
-      ascProvider: 'W7LPPWA48L'
-    });
-  } catch (error) {
-    console.error(error);
+  const { APPLE_ID, APPLE_ID_PASSWORD, APPLE_TEAM_ID } = process.env;
+  if (!APPLE_ID || !APPLE_ID_PASSWORD || !APPLE_TEAM_ID) {
+    console.warn('Skipping notarization: APPLE_ID / APPLE_ID_PASSWORD / APPLE_TEAM_ID are not all set.');
+    return;
   }
 
-  console.log(`Done notarizing ${appId}`);
+  console.log(`Notarizing ${appPath} as ${APPLE_ID} (team ${APPLE_TEAM_ID})`);
+  await notarize({
+    tool: 'notarytool',
+    appPath,
+    appleId: APPLE_ID,
+    appleIdPassword: APPLE_ID_PASSWORD,
+    teamId: APPLE_TEAM_ID
+  });
+  console.log('Done notarizing');
 };
-
-module.exports = notarize;

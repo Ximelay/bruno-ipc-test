@@ -168,15 +168,20 @@ export type {
   WebSocketMessage as BrunoWsMessage
 } from '@usebruno/schema-types/requests/websocket';
 
+export interface BrunoPresets {
+  requestType?: string;
+  requestUrl?: string;
+  defaultEnvironment?: string;
+}
+
 export interface BrunoConfig {
   version?: string;
+  // present only for OpenCollection (yml) collections; its presence marks the format.
+  opencollection?: string;
   name?: string;
   type?: string;
   ignore?: string[];
-  presets?: {
-    requestType?: string;
-    requestUrl?: string;
-  };
+  presets?: BrunoPresets;
   protobuf?: {
     protoFiles?: { path: string }[];
     importPaths?: { path: string; enabled?: boolean }[];
@@ -208,6 +213,7 @@ export interface BrunoConfig {
   };
   scripts?: {
     additionalContextRoots?: string[];
+    flow?: 'sandwich' | 'sequential';
   };
   openapi?: Array<{
     sourceUrl: string;

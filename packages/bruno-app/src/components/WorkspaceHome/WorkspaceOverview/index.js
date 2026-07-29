@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { IconPlus, IconFolder, IconDownload } from '@tabler/icons';
-import { importCollection, openCollection, importCollectionFromZip } from 'providers/ReduxStore/slices/collections/actions';
-import { setIsCreatingCollection, toggleSidebarCollapse } from 'providers/ReduxStore/slices/app';
+import { importCollection, importCollectionFromZip } from 'providers/ReduxStore/slices/collections/actions';
+import { setIsCreatingCollection, setIsOpeningCollection, toggleSidebarCollapse } from 'providers/ReduxStore/slices/app';
 import toast from 'react-hot-toast';
 import ImportCollection from 'components/Sidebar/ImportCollection';
 import ImportCollectionLocation from 'components/Sidebar/ImportCollectionLocation';
 import BulkImportCollectionLocation from 'components/Sidebar/BulkImportCollectionLocation';
 import CloneGitRepository from 'components/Sidebar/CloneGitRespository';
+import PostmanPackageReport from 'components/Sidebar/PostmanPackageReport';
+import usePostmanPackagePrompt from 'hooks/usePostmanPackagePrompt';
 import Button from 'ui/Button';
 import CollectionsList from './CollectionsList';
 import WorkspaceGit from './WorkspaceGit';
@@ -24,6 +26,7 @@ const WorkspaceOverview = ({ workspace }) => {
   const [importData, setImportData] = useState(null);
   const [showCloneGitModal, setShowCloneGitModal] = useState(false);
   const [gitRepositoryUrl, setGitRepositoryUrl] = useState(null);
+  const { postmanPackagePrompt, clearPostmanPackagePrompt, handleImportResolved } = usePostmanPackagePrompt();
 
   const workspaceCollectionsCount = workspace?.collections?.length || 0;
 
@@ -53,10 +56,7 @@ const WorkspaceOverview = ({ workspace }) => {
   };
 
   const handleOpenCollection = () => {
-    dispatch(openCollection()).catch((err) => {
-      console.error(err);
-      toast.error('An error occurred while opening the collection');
-    });
+    dispatch(setIsOpeningCollection(true));
   };
 
   const handleImportCollection = () => {
@@ -82,9 +82,10 @@ const WorkspaceOverview = ({ workspace }) => {
       : importCollection(convertedCollection, collectionLocation, options);
 
     dispatch(importAction)
-      .then(() => {
+      .then((importedItem) => {
         setImportCollectionLocationModalOpen(false);
         setImportData(null);
+        handleImportResolved(convertedCollection, importedItem);
       });
   };
 
@@ -125,6 +126,14 @@ const WorkspaceOverview = ({ workspace }) => {
           onClose={handleCloseGitModal}
           onFinish={handleCloseGitModal}
           collectionRepositoryUrl={gitRepositoryUrl}
+        />
+      )}
+      {postmanPackagePrompt && (
+        <PostmanPackageReport
+          key={postmanPackagePrompt.collectionPath}
+          report={postmanPackagePrompt.report}
+          collectionPath={postmanPackagePrompt.collectionPath}
+          onClose={clearPostmanPackagePrompt}
         />
       )}
 

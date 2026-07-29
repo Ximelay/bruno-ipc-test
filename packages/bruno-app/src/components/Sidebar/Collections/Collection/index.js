@@ -22,7 +22,10 @@ import {
   IconFolder,
   IconBook,
   IconCloudDownload,
-  IconCloudUpload
+  IconCloudUpload,
+  IconBook,
+  IconFileArrowRight,
+  IconAppWindow
 } from '@tabler/icons';
 import OpenAPISyncIcon from 'components/Icons/OpenAPISync';
 import { toggleCollection, collapseFullCollection, dismissGitChangeMarkers } from 'providers/ReduxStore/slices/collections';
@@ -33,13 +36,17 @@ import { setFocusedSidebarPath } from 'providers/ReduxStore/slices/app';
 import toast from 'react-hot-toast';
 import NewRequest from 'components/Sidebar/NewRequest';
 import NewFolder from 'components/Sidebar/NewFolder';
+import NewApp from 'components/Sidebar/NewApp';
 import CollectionItem from './CollectionItem';
 import RemoveCollection from './RemoveCollection';
+import MoveToWorkspace from './MoveToWorkspace';
+import { isPathExternalToBasePath } from 'utils/common/path';
 import { doesCollectionHaveItemsMatchingSearchText } from 'utils/collections/search';
 import { isItemAFolder, isItemARequest, areItemsLoading } from 'utils/collections';
 import { isTabForItemActive } from 'src/selectors/tab';
 
 import RenameCollection from './RenameCollection';
+import StatusBadge from 'ui/StatusBadge';
 import StyledWrapper from './StyledWrapper';
 import CloneCollection from './CloneCollection';
 import { scrollToTheActiveTab } from 'utils/tabs';
@@ -51,8 +58,6 @@ import { getRevealInFolderLabel } from 'utils/common/platform';
 import { openDevtoolsAndSwitchToTerminal } from 'utils/terminal';
 import ActionIcon from 'ui/ActionIcon';
 import MenuDropdown from 'ui/MenuDropdown';
-import StatusBadge from 'ui/StatusBadge';
-import { useBetaFeature, BETA_FEATURES } from 'utils/beta-features';
 import { useSidebarAccordion } from 'components/Sidebar/SidebarAccordionContext';
 import { createEmptyStateMenuItems } from 'utils/collections/emptyStateRequest';
 import useKeybinding from 'hooks/useKeybinding';
@@ -76,15 +81,16 @@ const getCollectionMarkerLabel = (markers = []) => {
 };
 
 const Collection = ({ collection, searchText }) => {
-  const isOpenAPISyncEnabled = useBetaFeature(BETA_FEATURES.OPENAPI_SYNC);
   const { dropdownContainerRef } = useSidebarAccordion();
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
+  const [showNewAppModal, setShowNewAppModal] = useState(false);
   const [showRenameCollectionModal, setShowRenameCollectionModal] = useState(false);
   const [showCloneCollectionModalOpen, setShowCloneCollectionModalOpen] = useState(false);
   const [showShareCollectionModal, setShowShareCollectionModal] = useState(false);
   const [showGenerateDocumentationModal, setShowGenerateDocumentationModal] = useState(false);
   const [showRemoveCollectionModal, setShowRemoveCollectionModal] = useState(false);
+  const [showMoveToWorkspaceModal, setShowMoveToWorkspaceModal] = useState(false);
   const [hasGitRepo, setHasGitRepo] = useState(false);
   const [dropType, setDropType] = useState(null);
   const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
@@ -94,11 +100,17 @@ const Collection = ({ collection, searchText }) => {
   const collectionRef = useRef(null);
   // Only count persisted requests and folders; transients and file items
   // (bruno.json, .js scripts) don't affect empty state
-  const itemCount = collection.items?.filter((i) => !i.isTransient && (isItemARequest(i) || isItemAFolder(i))).length || 0;
+  const itemCount = collection.items?.filter((i) => !i.isTransient && (isItemARequest(i) || isItemAFolder(i) || i.type === 'app')).length || 0;
 
   const isCollectionFocused = useSelector(isTabForItemActive({ itemUid: collection.uid }));
   const { hasCopiedItems } = useSelector((state) => state.app.clipboard);
   const menuDropdownRef = useRef(null);
+
+  // 'Move into Workspace' is available for collections opened from outside the current workspace.
+  const activeWorkspace = useSelector((state) =>
+    state.workspaces.workspaces.find((w) => w.uid === state.workspaces.activeWorkspaceUid)
+  );
+  const isMoveToWorkspaceVisible = isPathExternalToBasePath(activeWorkspace?.pathname, collection.pathname);
 
   // Open the OpenAPI Sync tab
   const openOpenAPISyncTab = () => {
@@ -249,6 +261,11 @@ const Collection = ({ collection, searchText }) => {
     return false;
   }, { enabled: isKeyboardFocused, deps: [isKeyboardFocused] });
 
+  useKeybinding('newRequest', () => {
+    setShowNewRequestModal(true);
+    return false;
+  }, { enabled: isKeyboardFocused, deps: [isKeyboardFocused] });
+
   const handleFocus = () => {
     setIsKeyboardFocused(true);
     dispatch(setFocusedSidebarPath(collection.pathname));
@@ -282,8 +299,8 @@ const Collection = ({ collection, searchText }) => {
         // For collection items, always show full highlight (inside drop)
         setDropType('inside');
       } else {
-        // For collections, show line indicator (adjacent drop)
-        setDropType('adjacent');
+        // For collections, show line indicator (above drop)
+        setDropType('above');
       }
     },
     drop: (draggedItem, monitor) => {
@@ -339,7 +356,7 @@ const Collection = ({ collection, searchText }) => {
   }
 
   const collectionRowClassName = classnames('flex py-1 collection-name items-center', {
-    'item-hovered': isOver && dropType === 'adjacent', // For collection-to-collection moves (show line)
+    'item-hovered': isOver && dropType === 'above', // For collection-to-collection moves (show line)
     'drop-target': isOver && dropType === 'inside', // For collection-item drops (highlight full area)
     'collection-focused-in-tab': isCollectionFocused && !isKeyboardFocused,
     'collection-keyboard-focused': isKeyboardFocused
@@ -351,6 +368,7 @@ const Collection = ({ collection, searchText }) => {
   };
 
   const requestItems = sortItemsBySequence(filter(collection.items, (i) => isItemARequest(i) && !i.isTransient));
+  const appItems = sortItemsBySequence(filter(collection.items, (i) => i.type === 'app' && !i.isTransient));
   const folderItems = sortByNameThenSequence(filter(collection.items, (i) => isItemAFolder(i) && !i.isTransient));
   const showEmptyCollectionMessage = showEmptyState && !hasSearchText;
 
@@ -407,6 +425,15 @@ const Collection = ({ collection, searchText }) => {
       }
     },
     {
+      id: 'new-app',
+      leftSection: IconAppWindow,
+      label: 'New App',
+      onClick: () => {
+        ensureCollectionIsMounted();
+        setShowNewAppModal(true);
+      }
+    },
+    {
       id: 'run',
       leftSection: IconPlayerPlay,
       label: 'Run',
@@ -424,13 +451,12 @@ const Collection = ({ collection, searchText }) => {
         setShowCloneCollectionModalOpen(true);
       }
     },
-    ...(isOpenAPISyncEnabled ? [{
+    {
       id: 'sync-openapi',
       leftSection: OpenAPISyncIcon,
       label: 'OpenAPI',
-      rightSection: <StatusBadge status="info" size="xs">Beta</StatusBadge>,
       onClick: openOpenAPISyncTab
-    }] : []),
+    },
     ...(hasCopiedItems
       ? [
           {
@@ -516,6 +542,19 @@ const Collection = ({ collection, searchText }) => {
         await openDevtoolsAndSwitchToTerminal(dispatch, collectionCwd);
       }
     },
+    ...(isMoveToWorkspaceVisible
+      ? [
+          {
+            id: 'move-to-workspace',
+            leftSection: IconFileArrowRight,
+            label: 'Move into Workspace',
+            testId: 'move-collection-to-workspace',
+            onClick: () => {
+              setShowMoveToWorkspaceModal(true);
+            }
+          }
+        ]
+      : []),
     {
       id: 'remove',
       leftSection: IconX,
@@ -530,11 +569,15 @@ const Collection = ({ collection, searchText }) => {
     <StyledWrapper className="flex flex-col" id={`collection-${collection.name.replace(/\s+/g, '-').toLowerCase()}`}>
       {showNewRequestModal && <NewRequest collectionUid={collection.uid} onClose={() => setShowNewRequestModal(false)} />}
       {showNewFolderModal && <NewFolder collectionUid={collection.uid} onClose={() => setShowNewFolderModal(false)} />}
+      {showNewAppModal && <NewApp collectionUid={collection.uid} onClose={() => setShowNewAppModal(false)} />}
       {showRenameCollectionModal && (
         <RenameCollection collectionUid={collection.uid} onClose={() => setShowRenameCollectionModal(false)} />
       )}
       {showRemoveCollectionModal && (
         <RemoveCollection collectionUid={collection.uid} onClose={() => setShowRemoveCollectionModal(false)} />
+      )}
+      {showMoveToWorkspaceModal && (
+        <MoveToWorkspace collectionUid={collection.uid} onClose={() => setShowMoveToWorkspaceModal(false)} />
       )}
       {showShareCollectionModal && (
         <ShareCollection collectionUid={collection.uid} onClose={() => setShowShareCollectionModal(false)} />
@@ -609,6 +652,9 @@ const Collection = ({ collection, searchText }) => {
         {!collectionIsCollapsed ? (
           <div>
             {folderItems?.map?.((i) => {
+              return <CollectionItem key={i.uid} item={i} collectionUid={collection.uid} collectionPathname={collection.pathname} searchText={searchText} />;
+            })}
+            {appItems?.map?.((i) => {
               return <CollectionItem key={i.uid} item={i} collectionUid={collection.uid} collectionPathname={collection.pathname} searchText={searchText} />;
             })}
             {requestItems?.map?.((i) => {

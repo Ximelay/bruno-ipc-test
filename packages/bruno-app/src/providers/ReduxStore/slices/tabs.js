@@ -62,7 +62,8 @@ export const tabsSlice = createSlice({
         'workspaceOverview',
         'workspaceEnvironments',
         'openapi-sync',
-        'openapi-spec'
+        'openapi-spec',
+        'changelog'
       ];
 
       const existingTab = find(state.tabs, (tab) => tab.uid === uid);
@@ -280,6 +281,24 @@ export const tabsSlice = createSlice({
         tab.scriptPaneTab = action.payload.scriptPaneTab;
       }
     },
+    setFocusErrorLine: (state, action) => {
+      const tab = find(state.tabs, (t) => t.uid === action.payload.uid);
+
+      if (tab) {
+        tab.focusErrorLine = {
+          scriptPhase: action.payload.scriptPhase,
+          line: action.payload.line,
+          requestedAt: action.payload.requestedAt
+        };
+      }
+    },
+    clearFocusErrorLine: (state, action) => {
+      const tab = find(state.tabs, (t) => t.uid === action.payload.uid);
+
+      if (tab) {
+        tab.focusErrorLine = null;
+      }
+    },
     updateQueryBuilderOpen: (state, action) => {
       const tab = find(state.tabs, (t) => t.uid === action.payload.uid);
 
@@ -344,7 +363,8 @@ export const tabsSlice = createSlice({
           if (siblingTabs && siblingTabs.length) {
             state.activeTabUid = last(siblingTabs).uid;
           } else {
-            state.activeTabUid = last(state.tabs).uid;
+            const overviewTab = find(state.tabs, (t) => t.type === 'workspaceOverview');
+            state.activeTabUid = overviewTab ? overviewTab.uid : last(state.tabs).uid;
           }
         }
       }
@@ -360,7 +380,12 @@ export const tabsSlice = createSlice({
 
       const activeTabStillExists = state.tabs.some((t) => t.uid === prevActiveTabUid);
       if (!activeTabStillExists) {
-        state.activeTabUid = state.tabs.length > 0 ? last(state.tabs).uid : null;
+        if (state.tabs.length === 0) {
+          state.activeTabUid = null;
+        } else {
+          const overviewTab = find(state.tabs, (t) => t.type === 'workspaceOverview');
+          state.activeTabUid = overviewTab ? overviewTab.uid : last(state.tabs).uid;
+        }
       }
     },
     makeTabPermanent: (state, action) => {
@@ -371,6 +396,14 @@ export const tabsSlice = createSlice({
       } else {
         console.error('Tab not found!');
       }
+    },
+    migrateCollectionTabsToYml: (state, action) => {
+      const { collectionUid } = action.payload;
+      state.tabs.forEach((tab) => {
+        if (tab.collectionUid === collectionUid && typeof tab.pathname === 'string') {
+          tab.pathname = tab.pathname.replace(/\.bru$/, '.yml');
+        }
+      });
     },
     collapseRequestPane: (state, action) => {
       const tab = find(state.tabs, (t) => t.uid === action.payload.uid);
@@ -440,6 +473,9 @@ export const tabsSlice = createSlice({
       const tab = find(state.tabs, (t) => t.uid === oldUid);
       if (tab) {
         tab.uid = newUid;
+        if (tab.type === 'folder-settings') {
+          tab.folderUid = newUid;
+        }
         if (state.activeTabUid === oldUid) {
           state.activeTabUid = newUid;
         }
@@ -459,7 +495,14 @@ export const tabsSlice = createSlice({
         state.activeTabUid = null;
       }
 
+      // Drop request tabs remapped by bru↔yml migrate that no longer match collection format
+      const staleExt = collection.format === 'yml' ? /\.bru$/i : /\.ya?ml$/i;
+
       (snapshotTabs || []).forEach((snapshotTab) => {
+        if (typeof snapshotTab.pathname === 'string' && staleExt.test(snapshotTab.pathname)) {
+          return;
+        }
+
         const tab = deserializeTab(snapshotTab, collection);
         state.tabs.push(tab);
 
@@ -470,6 +513,20 @@ export const tabsSlice = createSlice({
 
       if (!state.activeTabUid) {
         state.activeTabUid = state.tabs.find((t) => t.collectionUid === collectionUid)?.uid || null;
+      }
+    },
+    updateTabState: (state, action) => {
+      const { uid, tabState } = action.payload;
+      const tab = find(state.tabs, (t) => t.uid === uid);
+      if (tab) {
+        tab.tabState = { ...tab.tabState, ...tabState };
+      }
+    },
+    setTabAppPreview: (state, action) => {
+      const { uid, appPreview } = action.payload;
+      const tab = find(state.tabs, (t) => t.uid === uid);
+      if (tab) {
+        tab.appPreview = appPreview;
       }
     },
     reopenLastClosedTab: (state, action) => {
@@ -510,9 +567,12 @@ export const {
   updateGqlDocsOpen,
   updateTableColumnWidths,
   updateScriptPaneTab,
+  setFocusErrorLine,
+  clearFocusErrorLine,
   closeTabs,
   closeAllCollectionTabs,
   makeTabPermanent,
+  migrateCollectionTabsToYml,
   collapseRequestPane,
   collapseResponsePane,
   expandRequestPane,
@@ -520,6 +580,8 @@ export const {
   reorderTabs,
   syncTabUid,
   restoreTabs,
+  updateTabState,
+  setTabAppPreview,
   reopenLastClosedTab,
   updateQueryBuilderOpen,
   updateQueryBuilderWidth,

@@ -3,18 +3,21 @@ import * as MarkdownItReplaceLink from 'markdown-it-replace-link';
 import StyledWrapper from './StyledWrapper';
 import React from 'react';
 import { isValidUrl } from 'utils/url/index';
+import { patchLinkifyToExtendUrls } from 'utils/linkify';
 import DOMPurify from 'dompurify';
 import { useMemo } from 'react';
 
-const Markdown = ({ collectionPath, onDoubleClick, content }) => {
-  const markdownItOptions = {
-    html: true,
-    breaks: true,
-    linkify: true,
-    replaceLink: function (link, env) {
-      return link.replace(/^\./, collectionPath);
-    }
-  };
+const Markdown = ({ collectionPath, onDoubleClick, content, allowHtml = true }) => {
+  const md = useMemo(() => {
+    const instance = new MarkdownIt({
+      html: allowHtml,
+      breaks: true,
+      linkify: true,
+      replaceLink: (link) => link.replace(/^\./, collectionPath)
+    }).use(MarkdownItReplaceLink);
+
+    return patchLinkifyToExtendUrls(instance);
+  }, [allowHtml, collectionPath]);
 
   const handleOnClick = (event) => {
     const target = event.target;
@@ -34,8 +37,7 @@ const Markdown = ({ collectionPath, onDoubleClick, content }) => {
     }
   };
 
-  const md = new MarkdownIt(markdownItOptions).use(MarkdownItReplaceLink);
-  const htmlFromMarkdown = useMemo(() => md.render(content || ''), [content, collectionPath]);
+  const htmlFromMarkdown = useMemo(() => md.render(content || ''), [content, collectionPath, allowHtml]);
   const cleanHTML = useMemo(() => DOMPurify.sanitize(htmlFromMarkdown), [htmlFromMarkdown]);
 
   return (

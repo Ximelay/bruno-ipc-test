@@ -22,7 +22,7 @@
   "dependencies": {
     "@faker-js/faker": "^9.7.0",
     "@grpc/grpc-js": "^1.13.3",
-    "@grpc/proto-loader": "^0.7.15",
+    "@grpc/proto-loader": "^0.8.1",
     "@types/qs": "^6.9.18",
     "axios": "1.13.6",
     "pac-resolver": "^7.0.1",

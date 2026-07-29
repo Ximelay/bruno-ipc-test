@@ -23,7 +23,6 @@ import {
   IconBook,
   IconCloudDownload,
   IconCloudUpload,
-  IconBook,
   IconFileArrowRight,
   IconAppWindow
 } from '@tabler/icons';

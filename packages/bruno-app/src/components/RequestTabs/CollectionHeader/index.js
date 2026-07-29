@@ -15,7 +15,6 @@ import {
   IconUpload,
   IconCloudDownload,
   IconCloudUpload,
-  IconUpload,
   IconFileCode,
   IconFileOff,
   IconCode,
